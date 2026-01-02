@@ -16,15 +16,18 @@
 
 ### Container Architecture
 ```
-┌─────────────────────────────────────┐
-│ WikiSeed Ecosystem                  │
-├─────────────┬──────────┬────────────┤
-│   Scraper   │Downloader│  Creator   │
-├─────────────┼──────────┼────────────┤
-│   Seeder    │ Sharing  │   Web UI   │
-├─────────────┴──────────┴────────────┤
-│         PostgreSQL Database         │
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────┐
+│         WikiSeed Ecosystem              │
+├─────────────────────────────────────────┤
+│            Controller                   │
+│     (Orchestration & Job Queue)         │
+├──────────┬──────────┬──────────┬────────┤
+│ Scraper  │Downloader│ Creator  │ Seeder │
+├──────────┼──────────┼──────────┼────────┤
+│ Sharing  │  Web UI  │          │        │
+├─────────────────────────────────────────┤
+│       PostgreSQL Database               │
+└─────────────────────────────────────────┘
 ```
 
 **Container Responsibilities:**
@@ -45,7 +48,13 @@
   - Queue pause: 90% (finish active downloads, stop new downloads)
   - Cleanup trigger: 85% (start cleanup process)
   - Safety margin: 5GB always free (hard stop active downloads)
-- **File organization**: Same as torrent file orgnization
+- **File organization**: Same as torrent file organization
+
+### Storage Threshold Behavior
+- **90-100%**: Queue paused, finish active downloads only, no new downloads
+- **85-90%**: Cleanup in progress, downloads continue if space allows
+- **Below 85%**: Normal operation, queue resumes automatically
+- **5GB Safety Margin**: Hard stop if free space drops below 5GB regardless of percentage
 
 ### Download Logic
 - **Processing**: FIFO (First In, First Out) as dumps become available
@@ -90,12 +99,18 @@ Create multiple logical groupings using hard links (no file duplication):
 - **Monthly**: `"Wikimedia Complete - [Month Year]"` (current dumps)
 - **History dumps**: `"Wikimedia Complete with History - [Year]"` (Once yearly)
 
+### Hard Link Implementation Details
+- **Storage**: Single copy of each file stored in `storage/[project]/[language]/`
+- **Torrents**: Hard links created in `torrents/[torrent_name]/` directory structure
+- **Cleanup Logic**: Check link count before deletion (only delete if refcount = 1)
+- **Benefits**: 18TB storage can create multiple 18TB torrents without duplication
+
 ### Torrent Content Structure
 ```
 torrent_name/
 ├── wikipedia/                  #project
-│   ├── en                      #language
-│    ── ├── [dump_files]
+│   ├── en/                     #language
+│   │   └── [dump_files]
 ├── checksums.txt
 ├── legal.txt (based on https://dumps.wikimedia.org/legal.html)
 └── sources.txt
@@ -122,14 +137,14 @@ MD5(enwiki-20250601-pages-articles.xml.bz2)= def456...
 # WikiSeed GitHub: https://github.com/WikiSeedProject/WikiSeed
 
 Project: Wikipedia
-Languauge: en
+Language: en
 Source: https://dumps.wikimedia.org/enwiki/20250601/
 Archive Source Page: https://archive.ph/abc123
 Mirror used? Y/N
 Mirror Source: https://dumps.wikimedia.your.org/enwiki/20220820/
 Archive Mirror Source Page: https://archive.ph/hij789
 Status JSON: https://dumps.wikimedia.org/enwiki/20250601/dumpstatus.json
-Archived Stauts JSON: https://archive.ph/def456
+Archived Status JSON: https://archive.ph/def456
 ```
 
 ## Distribution Strategy
@@ -173,13 +188,70 @@ Archived Stauts JSON: https://archive.ph/def456
 - **Easy changes**: All settings adjustable without reinstallation
 
 ### Configuration Categories
-**Storage Management**: Thresholds, cleanup rules, safety margins
-**Performance**: Bandwidth limits, scheduling, resource allocation
+
+**Storage Management**:
+- Storage path (default: `/data/wikiseed`)
+- Cleanup threshold percentage (default: 85%)
+- Queue pause threshold (default: 90%)
+- Safety margin size (default: 5GB)
+- Preserve rule: minimum seeds before cleanup (default: 1)
+
+**Performance**:
+- Download bandwidth limit (default: unlimited)
+- Upload bandwidth limit (default: unlimited)
+- Concurrent downloads (default: 3)
+- Database polling interval (default: 30 seconds)
+- Chunk size for downloads (default: 100MB)
+
+**Discovery**:
+- Wiki discovery schedule (default: weekly)
+- Dump check schedule (default: daily)
+- Mirror URLs (default: dumps.wikimedia.org only)
+
+**Sharing**:
+- Internet Archive access keys
+- Academic Torrents credentials
+- RSS feed URL
 
 ### Change Management
 - **Graceful restarts**: Complete pending operations before container restart
 - **Web UI feedback**: Show which containers will restart and wait times
 - **Validation**: Check all settings before applying changes
+
+## Secrets Management
+
+### Environment Variables
+All secrets stored in environment variables, never in code or config files:
+
+**Database**:
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `POSTGRES_DB`
+- `POSTGRES_HOST`
+- `POSTGRES_PORT`
+
+**Internet Archive**:
+- `IA_ACCESS_KEY`
+- `IA_SECRET_KEY`
+
+**Academic Torrents**:
+- `AT_USERNAME`
+- `AT_PASSWORD`
+
+**Application**:
+- `SECRET_KEY` (Flask session encryption)
+- `ENVIRONMENT` (dev/prod)
+
+### Docker Secrets
+Production deployment uses Docker secrets:
+1. Create secrets: `docker secret create postgres_password /path/to/file`
+2. Reference in compose: `secrets: [postgres_password]`
+3. Access in containers: Read from `/run/secrets/postgres_password`
+
+### Development
+- Use `.env` file (gitignored) for local development
+- Template provided as `.env.example`
+- Never commit real credentials
 
 ## Future-Proofing
 
@@ -193,6 +265,27 @@ Archived Stauts JSON: https://archive.ph/def456
 - **Version management**: Clean upgrade path for WikiSeed installations
 
 ## Technical Stack
+
+### Version Requirements
+
+**Python**: 3.11+
+**PostgreSQL**: 15+
+**Docker**: 24.0+
+**Docker Compose**: 2.20+
+
+**Python Packages** (minimum versions):
+- Flask: 3.0+
+- SQLAlchemy: 2.0+
+- Alembic: 1.12+
+- APScheduler: 3.10+
+- requests: 2.31+
+- psycopg2-binary: 2.9+
+- python-dotenv: 1.0+
+
+**Frontend**:
+- React: 18.0+ (or 19+ if using latest)
+- Chart.js: 4.0+
+- Node.js: 20+ LTS
 
 ### Backend
 - **Language**: Python
@@ -282,6 +375,117 @@ tests/
 - **Alembic**: Database migration management
 - **PostgreSQL**: Primary database with JSON support
 
+### Database Schema Definition
+
+#### Table: wikis
+Tracks discovered Wikimedia projects
+- `id` (UUID, PK)
+- `project` (VARCHAR, e.g., "wikipedia", "wiktionary")
+- `language` (VARCHAR, e.g., "en", "fr")
+- `url` (VARCHAR, source URL)
+- `discovered_at` (TIMESTAMP)
+- `active` (BOOLEAN, default TRUE)
+- **Unique constraint**: (project, language)
+- **Index**: (active, project, language)
+
+#### Table: dumps
+Tracks individual dump files
+- `id` (UUID, PK)
+- `wiki_id` (UUID, FK -> wikis.id)
+- `dump_date` (DATE, e.g., "20250601")
+- `file_name` (VARCHAR)
+- `file_size` (BIGINT, bytes)
+- `checksum_md5` (VARCHAR)
+- `checksum_sha1` (VARCHAR)
+- `source_url` (VARCHAR)
+- `mirror_url` (VARCHAR, nullable)
+- `archived_source_url` (VARCHAR, archive.ph link)
+- `status` (ENUM: pending, downloading, downloaded, failed, deleted)
+- `downloaded_at` (TIMESTAMP, nullable)
+- `deleted_at` (TIMESTAMP, nullable)
+- `local_path` (VARCHAR, nullable)
+- **Unique constraint**: (wiki_id, dump_date, file_name)
+- **Index**: (status, dump_date)
+- **Index**: (wiki_id, status)
+
+#### Table: jobs
+Job queue for container work
+- `id` (UUID, PK)
+- `job_type` (ENUM: discover_wikis, find_dumps, download_dump, create_torrent, upload_ia, start_seeding, upload_sharing)
+- `status` (ENUM: pending, assigned, in_progress, completed, failed, quarantined)
+- `payload` (JSONB, job-specific data)
+- `created_at` (TIMESTAMP)
+- `assigned_at` (TIMESTAMP, nullable)
+- `started_at` (TIMESTAMP, nullable)
+- `completed_at` (TIMESTAMP, nullable)
+- `container_id` (VARCHAR, nullable, which container claimed it)
+- `retry_count` (INTEGER, default 0)
+- `max_retries` (INTEGER, default 3)
+- `error_message` (TEXT, nullable)
+- `depends_on_job_id` (UUID, FK -> jobs.id, nullable)
+- **Index**: (status, job_type, created_at)
+- **Index**: (container_id, status)
+- **Index**: (depends_on_job_id)
+
+#### Table: torrents
+Tracks created and distributed torrents
+- `id` (UUID, PK)
+- `name` (VARCHAR, e.g., "Wikimedia Complete - June 2025")
+- `info_hash` (VARCHAR, unique)
+- `created_at` (TIMESTAMP)
+- `torrent_file_path` (VARCHAR)
+- `total_size` (BIGINT, bytes)
+- `file_count` (INTEGER)
+- `grouping_type` (ENUM: monthly, yearly_history)
+- `grouping_date` (DATE)
+- **Unique constraint**: (info_hash)
+- **Index**: (grouping_type, grouping_date)
+
+#### Table: torrent_files
+Maps dump files to torrents (many-to-many)
+- `id` (UUID, PK)
+- `torrent_id` (UUID, FK -> torrents.id)
+- `dump_id` (UUID, FK -> dumps.id)
+- `hard_link_path` (VARCHAR, path within torrent)
+- **Unique constraint**: (torrent_id, dump_id)
+- **Index**: (torrent_id)
+- **Index**: (dump_id)
+
+#### Table: shares
+Tracks torrent distribution to sharing sites
+- `id` (UUID, PK)
+- `torrent_id` (UUID, FK -> torrents.id)
+- `platform` (ENUM: academic_torrents, internet_archive, rss)
+- `platform_url` (VARCHAR, nullable)
+- `uploaded_at` (TIMESTAMP, nullable)
+- `status` (ENUM: pending, uploading, active, failed)
+- `seeders` (INTEGER, nullable)
+- `leechers` (INTEGER, nullable)
+- `last_checked` (TIMESTAMP, nullable)
+- **Unique constraint**: (torrent_id, platform)
+- **Index**: (status, platform)
+
+#### Table: metrics
+System performance and health metrics
+- `id` (UUID, PK)
+- `timestamp` (TIMESTAMP)
+- `metric_type` (ENUM: storage_used, storage_free, download_speed, upload_speed, active_torrents, total_seeders)
+- `value` (NUMERIC)
+- `unit` (VARCHAR, e.g., "bytes", "bytes/sec", "count")
+- **Index**: (timestamp DESC, metric_type)
+- **Partition**: By timestamp (monthly partitions)
+
+#### Table: container_health
+Container status tracking
+- `id` (UUID, PK)
+- `container_name` (VARCHAR)
+- `last_heartbeat` (TIMESTAMP)
+- `status` (ENUM: healthy, degraded, failed)
+- `jobs_completed` (INTEGER, counter)
+- `jobs_failed` (INTEGER, counter)
+- **Unique constraint**: (container_name)
+- **Index**: (last_heartbeat DESC)
+
 ### Controller Container Architecture
 
 **Core Responsibilities:**
@@ -323,6 +527,13 @@ pending → assigned → in_progress → completed
 - Quarantine jobs after maximum retry attempts
 - Priority system: FIFO with resource-based scheduling
 
+### Job Creation & Assignment Flow
+1. **Controller** creates all jobs based on workflow rules
+2. **Containers** poll `jobs` table for work matching their type
+3. **Containers** mark jobs as `in_progress` when claimed
+4. **Containers** create follow-up jobs upon completion (e.g., downloader creates create_torrent job)
+5. **Controller** monitors for stuck jobs and reassigns as needed
+
 ### Inter-Container Communication
 
 **Database Polling System:**
@@ -330,6 +541,36 @@ pending → assigned → in_progress → completed
 - Controller creates jobs and monitors overall workflow
 - Shared database provides audit trail and coordination
 - No complex message queues - simple and reliable
+
+### Database Polling Optimization
+
+**Polling Strategy**:
+- **Interval**: 30 seconds (configurable)
+- **Method**: `SELECT FOR UPDATE SKIP LOCKED` for job claims
+- **Connection pooling**: Max 5 connections per container
+- **Timeout**: 5 second query timeout
+
+**Efficiency Measures**:
+- **Indexed queries**: All job polls use status+type+created_at index
+- **LIMIT clauses**: Containers fetch max 10 pending jobs per poll
+- **Conditional polling**: Containers skip polls when at capacity
+- **Notify/Listen**: Optional NOTIFY trigger when new jobs created (advanced)
+
+**Example Query**:
+```sql
+SELECT * FROM jobs
+WHERE status = 'pending'
+  AND job_type = 'download_dump'
+ORDER BY created_at ASC
+LIMIT 10
+FOR UPDATE SKIP LOCKED;
+```
+
+This ensures:
+- No job claimed by multiple containers
+- First-in-first-out ordering
+- Skip locked rows (no waiting)
+- Minimal database load
 
 **Communication Flow:**
 ```
@@ -353,6 +594,29 @@ pending → assigned → in_progress → completed
 - **Retry logic**: Handle temporary database connectivity issues
 - **Transaction management**: Ensure data consistency across operations
 - **Backup coordination**: Coordinate with container operations
+
+### Database Backup Strategy
+
+**Automated Backups**:
+- **Frequency**: Daily at 2 AM UTC
+- **Retention**: 7 daily, 4 weekly, 12 monthly
+- **Method**: `pg_dump` with compression
+- **Storage**: Local backup directory + optional S3/B2
+
+**Backup Types**:
+1. **Full database dump**: Complete PostgreSQL dump
+2. **Critical tables only**: wikis, dumps, torrents, shares (faster restore)
+3. **Metrics excluded**: Can be regenerated, reduces backup size
+
+**Disaster Recovery**:
+- **RPO** (Recovery Point Objective): 24 hours
+- **RTO** (Recovery Time Objective): 4 hours
+- **Process**: Automated restore script with verification
+
+**Backup Verification**:
+- Weekly restore test to separate container
+- Integrity check via `pg_restore --list`
+- Automated alerts on backup failures
 
 ## Development Phases
 
