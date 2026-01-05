@@ -17,17 +17,29 @@ This split keeps bandwidth-intensive seeding on the home server while offloading
 ## Server Components
 
 ### Processor
-A single Python script triggered by cron that runs the full pipeline:
-1. Discover available dumps from Wikimedia
-2. Download dumps
-3. Upload to Internet Archive
-4. Archive dump pages to archive.today
-5. Decompress dumps (for uncompressed variants)
-6. Create torrents with webseeds (local + IA)
-7. Generate hashes (MD5, SHA1 from Wikimedia; SHA256 generated)
-8. Generate manifest and status files
-9. Upload manifest/status to IA, GitHub Gist, and pastebin
-10. Push manifest and .torrent files to Cloudflare R2
+
+The processor is split into granular scripts for easier debugging, testing, and recovery from failures. Each script can be rerun independently without restarting the entire pipeline.
+
+### Processor Scripts
+
+| Script | Purpose | Input | Output |
+|--------|---------|-------|--------|
+| `discover.py` | Query Wikimedia for available dumps | Cycle date, config | List of dumps to fetch |
+| `download.py` | Download dumps from Wikimedia | Dump list | Downloaded files |
+| `upload_ia.py` | Upload dumps to Internet Archive | Downloaded files | IA item identifiers |
+| `archive.py` | Archive dump pages to archive.today | Dump URLs | Archive URLs |
+| `decompress.py` | Create uncompressed versions | Compressed files | Uncompressed files |
+| `torrent.py` | Create torrents with webseeds | Files, IA URLs | .torrent files |
+| `manifest.py` | Generate manifest, status, hashes | All metadata | JSON/TXT files |
+| `publish.py` | Push to R2, Gist, pastebin | Manifest, torrents | Confirmation |
+
+### Processor Orchestration
+
+A thin orchestrator script or sequential cron jobs call each script in order. State is passed between scripts via files or a small SQLite database tracking progress per cycle.
+
+### Processor Failure Recovery
+
+If a script fails, fix the issue and rerun from that point. Earlier steps don't need to repeat. The orchestrator tracks which steps completed successfully for each cycle.
 
 ### Seeder
 Off-the-shelf torrent client (qBittorrent or Transmission) running in a container, watching a directory for new torrents. No custom code required.
@@ -65,16 +77,16 @@ Stores:
 
 History torrents are self-contained and do not require the regular torrent.
 
-### Not Included
+### Not Included (for now)
 - Wikimedia Commons media files (out of scope due to size)
 
 ## Torrent Structure
 
 ### Naming Convention
 ```
-wikimedia-dumps-YYYY-MM-DD.torrent           (compressed)
+wikimedia-dumps-YYYY-MM-DD.torrent                (compressed)
 wikimedia-dumps-YYYY-MM-DD-uncompressed.torrent
-wikimedia-dumps-YYYY-MM-DD-history.torrent   (1st cycle only, compressed)
+wikimedia-dumps-YYYY-MM-DD-full-history.torrent   (1st cycle only, compressed)
 ```
 
 ### 1st Cycle Torrents
@@ -89,14 +101,30 @@ wikimedia-dumps-YYYY-MM-DD-history.torrent   (1st cycle only, compressed)
 ### Torrent Contents
 Each torrent is one large bundle for the dump date. Users select which files they want within the torrent (by project, language, etc.). Files use original Wikimedia filenames for provenance.
 
-Each torrent includes:
-- `docs/` - README, format explanations, license info, links to external tools
-- `tools/wikiseed/` - Simple Python scripts for common tasks (GPL)
-- `tools/third-party/` - Bundled external tools (their original licenses)
-- `tools/LICENSES.txt` - License documentation for all tools
-- `VERSION.txt` - Version of docs/tools included
-- Hash files with MD5, SHA1 (from Wikimedia), and SHA256 (generated)
-- Archive URLs (archive.today links for dump pages)
+Example folder structure:
+
+torrent-root/
+├── compressed/
+│   └── en/
+│       └── wikipedia/
+│           └── ...
+├── uncompressed/
+│   └── en/
+│       └── wikipedia/
+│           └── ...
+├── tools/
+│   ├── wikiseed/          # Simple Python scripts for common tasks (GPL)
+│   ├── third-party/       # Bundled external tools (their original licenses)
+│   └── LICENSES.txt       # License documentation for all tools
+├── README.txt             # Format explanations, links to external tools
+├── LICENSE.txt            # WikiSeed and content licenses
+├── VERSION.txt            # Version of docs/tools included
+├── HASH.json              # Checksums: MD5, SHA1 (Wikimedia), SHA256 (generated)
+├── HASH.txt
+├── STATUS.json            # Pass/fail status of every included dump
+├── STATUS.txt
+├── ARCHIVE_URLS.json      # archive.today links for dump pages
+└── ARCHIVE_URLS.txt
 
 ## Timing and Cycles
 
@@ -107,14 +135,14 @@ Wikimedia initializes dumps on the 1st and 20th of each month.
 One dump behind: process the previous cycle while the current one is being generated.
 
 ### Publish Deadlines
-- 1st cycle dumps: Publish on the 19th
-- 20th cycle dumps: Publish on the last day of the month
+- 1st cycle dumps: Publish on the 19th (or sooner if everything is done with no errors)
+- 20th cycle dumps: Publish on the last day of the month (or sooner if everything is done with no errors)
 
 ### Failure Handling
 - Retry with exponential backoff on failures
 - If a wiki's dump fails after retries, continue with successful wikis
 - Accept gaps and fill in next cycle if possible
-- No tracking of failures beyond the current cycle
+- Document failures in README and in manifest
 
 ### Date Window
 For a given cycle, include dumps dated within that window only (e.g., June 1st cycle includes dumps dated June 1-19).
@@ -174,8 +202,9 @@ Manifest, status, and hash files uploaded to:
 
 ### Webseeds
 Each torrent includes webseeds pointing to:
-- WikiSeed server (initial seeder)
 - Internet Archive URLs
+- Listed Wikimedia Dump Mirrors
+- Wikimedia server (initial download)
 
 ## Clients
 
@@ -184,8 +213,8 @@ Each torrent includes webseeds pointing to:
 - Configuration options: languages, projects, date ranges, storage limits
 - Storage management options:
   - Pause and warn (default)
-  - Drop oldest first
   - Drop uncompressed before compressed
+  - Drop oldest first
   - Minimum retention period
 - Backends for different torrent clients:
   - qBittorrent API
@@ -213,11 +242,12 @@ Each torrent includes webseeds pointing to:
 
 ### Primary
 - WikiSeed website and API
-- Torrent swarm with public trackers
+- Torrent swarm with public trackers (found at https://torrends.to/torrent-tracker-list/)
 
 ### Secondary
 - Academic Torrents (auto-upload via API)
 - Internet Archive (direct downloads for non-torrent users)
+- iTorrents.org
 
 ### Future
 - Wikimedia community pages (via bot, outside project scope)
@@ -234,11 +264,11 @@ All three connected so announcements propagate to all channels.
 ## Statistics
 
 ### Tracked Metrics
-- Seeders per torrent (from tracker scrapes)
+- Seeders/ratio per torrent (from tracker scrapes)
 - Download counts
 - Website traffic
 - Processing stats (time, sizes, success rates per cycle)
-- Total file upload/download size
+- Total file upload/download bandwidth
 
 ## Monitoring
 
