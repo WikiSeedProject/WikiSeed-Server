@@ -250,7 +250,7 @@ Each torrent includes webseeds pointing to:
 - iTorrents.org
 
 ### Future
-- Wikimedia community pages (via bot, outside project scope)
+- Auto update Wikimedia community pages (via bot, outside project scope)
 
 ## Announcements
 
@@ -258,21 +258,22 @@ Each torrent includes webseeds pointing to:
 - Blog on wikiseed.app
 - Mailing list
 - RSS feed
+- Connect feed to social media (X, FB, IG, Bluesky, Reddit, Mastedon, etc.)
 
-All three connected so announcements propagate to all channels.
+All connected so announcements propagate to all channels.
 
 ## Statistics
 
 ### Tracked Metrics
 - Seeders/ratio per torrent (from tracker scrapes)
 - Download counts
-- Website traffic
+- Website traffic (internal, no Google Analytics)
 - Processing stats (time, sizes, success rates per cycle)
 - Total file upload/download bandwidth
 
 ## Monitoring
 
-- Email alerts on pipeline failures
+- Email alerts on pipeline failures, status page on site
 - Dry run mode for validation without downloads/uploads
 - Small wiki mode for testing full flow quickly
 
