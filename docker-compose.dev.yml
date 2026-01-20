@@ -1,0 +1,80 @@
+# WikiSeed Server - Development Docker Compose Override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  controller:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development  # Optional: use multi-stage build
+    volumes:
+      # Mount source code for live reloading
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
+    environment:
+      - LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+    command: python -m src.controller --dev
+
+  scraper:
+    volumes:
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
+    environment:
+      - LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+    command: python -m src.scraper --dev
+
+  downloader:
+    volumes:
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
+    environment:
+      - LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+    command: python -m src.downloader --dev
+
+  uploader:
+    volumes:
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
+    environment:
+      - LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+    command: python -m src.uploader --dev
+
+  creator:
+    volumes:
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
+    environment:
+      - LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+    command: python -m src.creator --dev
+
+  publisher:
+    volumes:
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
+    environment:
+      - LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+    command: python -m src.publisher --dev
+
+  monitor:
+    volumes:
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
+    environment:
+      - LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+    command: python -m flask --app src.monitor run --host 0.0.0.0 --port 8000 --reload
+
+  db-init:
+    volumes:
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
+    environment:
+      - LOG_LEVEL=DEBUG

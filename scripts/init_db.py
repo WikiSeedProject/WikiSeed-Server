@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Initialize WikiSeed database with latest schema."""
 
+import os
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path("data/db/jobs.db")
+# Use DATABASE_PATH env var if set (for Docker), otherwise use relative path
+DB_PATH = Path(os.getenv("DATABASE_PATH", "data/db/jobs.db"))
 MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
 
 
@@ -43,8 +45,19 @@ def init_database() -> None:
             print(f"✓ Migration {version} applied")
 
     conn.commit()
+
+    # Ensure database is written to disk
+    conn.execute("PRAGMA wal_checkpoint(FULL)")
+    conn.commit()
     conn.close()
-    print(f"✓ Database initialized at {DB_PATH}")
+
+    # Verify database exists
+    if DB_PATH.exists():
+        size = DB_PATH.stat().st_size
+        print(f"✓ Database initialized at {DB_PATH} ({size} bytes)")
+    else:
+        print(f"✗ ERROR: Database file not found at {DB_PATH}")
+        raise FileNotFoundError(f"Database not created at {DB_PATH}")
 
 
 if __name__ == "__main__":
