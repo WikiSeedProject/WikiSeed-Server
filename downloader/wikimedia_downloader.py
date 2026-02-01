@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Wikimedia Dumps Downloader
+WikiSeed Downloader
 Downloads dumps from Wikimedia with resume support, checksum verification, and incremental updates.
 """
 
@@ -38,7 +38,7 @@ except ImportError:
     DATE_FILTER = []
     SKIP_EXTENSIONS = []
     DEBUG = False
-    USER_AGENT = "WikimediaDownloader/1.0"
+    USER_AGENT = "WikiSeed.app/0.1"
     TIMEOUT_TOTAL = 3600
     TIMEOUT_CONNECT = 60
     TIMEOUT_READ = 300

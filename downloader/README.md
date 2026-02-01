@@ -13,7 +13,7 @@ This script downloads all Wikimedia content history dumps from https://dumps.wik
 - ✅ Progress logging to file and terminal
 - ✅ Handles 400+ wikis and multiple date dumps
 
-## Installation
+## Installationq
 
 ### 1. Install Python dependencies
 ```bash

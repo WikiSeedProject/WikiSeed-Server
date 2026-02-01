@@ -4,7 +4,7 @@
 set -e
 
 echo "==========================================="
-echo "Wikimedia Dumps Downloader - Setup"
+echo "Wikiseed Downloader - Setup"
 echo "==========================================="
 echo
 
