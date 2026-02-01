@@ -1,11 +1,6 @@
 """
-Configuration Template for Wikimedia Dumps Downloader
-
-COPY THIS FILE:
-    cp config.py.example config.py
-
-THEN EDIT config.py with your specific settings.
-Your config.py will NOT be tracked by git (it's in .gitignore).
+Configuration for Wikimedia Dumps Downloader
+Edit this file to change what you're downloading
 """
 
 from pathlib import Path
@@ -14,28 +9,25 @@ from pathlib import Path
 # DUMP SOURCE - Choose what to download
 # ============================================================================
 
-# Option 1: Content Current (recommended - current revisions only, ~1-2 TB total)
-BASE_URL = "https://dumps.wikimedia.org/other/mediawiki_content_current/"
-
-# Option 2: Content History (full edit history - HUGE, ~10-20+ TB total)
+# Option 1: Content History (full edit history - HUGE)
 # BASE_URL = "https://dumps.wikimedia.org/other/mediawiki_content_history/"
 
+# Option 2: Content Current (current revisions only - much smaller)
+BASE_URL = "https://dumps.wikimedia.org/other/mediawiki_content_current/"
+
 # Option 3: Any other Wikimedia dump location
-# BASE_URL = "https://dumps.wikimedia.org/backup-index.html"  # Example only
+# BASE_URL = "https://dumps.wikimedia.org/backup-index.html"  # Won't work, just example
+# BASE_URL = "https://dumps.wikimedia.org/enwiki/latest/"     # Single wiki dumps
 
 # ============================================================================
 # DOWNLOAD SETTINGS
 # ============================================================================
 
-# Where to save downloads
-# CHANGE THIS to your actual drive/mount point!
-# Examples:
-#   DOWNLOAD_DIR = Path("/mnt/bigdrive/wikimedia_dumps")
-#   DOWNLOAD_DIR = Path("/media/yourusername/WD24TB/wikimedia_dumps")
-DOWNLOAD_DIR = Path.home() / "wikimedia_dumps"  # CHANGE THIS
+# Where to save downloads (will be set by setup.sh)
+DOWNLOAD_DIR = Path("/mnt/bigdrive/wikimedia_dumps")
 
 # Concurrent downloads (10-30 recommended for 1Gb connection)
-MAX_CONCURRENT_DOWNLOADS = 15
+MAX_CONCURRENT_DOWNLOADS = 20
 
 # Download chunk size in bytes
 CHUNK_SIZE = 1024 * 1024  # 1MB
@@ -77,7 +69,7 @@ SKIP_EXTENSIONS = []
 DEBUG = False
 
 # User agent for requests
-USER_AGENT = "WikimediaDownloader/1.0 (Educational/Archival Use)"
+USER_AGENT = "WikiSeed/0.1 (Archival, info@wikiseed.app)"
 
 # Connection timeout (seconds)
 TIMEOUT_TOTAL = 3600  # 1 hour
