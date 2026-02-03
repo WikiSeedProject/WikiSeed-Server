@@ -2,6 +2,11 @@
 # Wikimedia Dumps Downloader - Maintenance Utilities
 # Common tasks for managing the downloader
 
+# Activate virtual environment if it exists (for macOS)
+if [ -d "$(dirname "$0")/venv" ]; then
+    source "$(dirname "$0")/venv/bin/activate"
+fi
+
 DOWNLOAD_DIR="$HOME/wikimedia_dumps"  # Change this to match your DOWNLOAD_DIR
 DB_PATH="$DOWNLOAD_DIR/download_state.db"
 
