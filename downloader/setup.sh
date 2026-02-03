@@ -4,33 +4,145 @@
 set -e
 
 echo "==========================================="
-echo "Wikiseed Downloader - Setup"
+echo "Wikimedia Dumps Downloader - Setup"
 echo "==========================================="
+echo
+
+# Check if running with sudo (not recommended)
+if [ "$EUID" -eq 0 ] && [ -n "$SUDO_USER" ]; then
+    echo "⚠️  WARNING: Running with sudo"
+    echo "This is not recommended and may cause permission issues."
+    echo
+    read -p "Continue anyway? (y/N) " continue_sudo
+    if [[ ! "$continue_sudo" =~ ^[Yy]$ ]]; then
+        echo "Please run without sudo: ./setup.sh"
+        exit 1
+    fi
+fi
+
+# Detect OS
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    OS="macos"
+    echo "Detected: macOS"
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    OS="linux"
+    echo "Detected: Linux"
+    # Check Ubuntu/Debian version
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        echo "Distribution: $NAME $VERSION"
+    fi
+else
+    OS="unknown"
+    echo "Detected: Unknown OS ($OSTYPE)"
+fi
 echo
 
 # Check Python version
 echo "Checking Python installation..."
 if ! command -v python3 &> /dev/null; then
     echo "Error: Python 3 is not installed"
-    echo "Install with: sudo apt install python3 python3-pip"
+    if [ "$OS" = "macos" ]; then
+        echo "Install with: brew install python3"
+    else
+        echo "Install with: sudo apt install python3 python3-full python3-venv"
+    fi
     exit 1
 fi
 
 python_version=$(python3 --version | cut -d' ' -f2)
+python_major=$(echo $python_version | cut -d. -f1)
+python_minor=$(echo $python_version | cut -d. -f2)
 echo "✓ Found Python $python_version"
 
-# Check pip
-if ! command -v pip3 &> /dev/null; then
-    echo "Error: pip3 is not installed"
-    echo "Install with: sudo apt install python3-pip"
-    exit 1
-fi
-echo "✓ Found pip3"
+# Determine if we need venv
+NEED_VENV=false
 
-# Install dependencies
-echo
-echo "Installing Python dependencies..."
-pip3 install -r requirements.txt
+if [ "$OS" = "macos" ]; then
+    # macOS always needs venv for Python 3.11+
+    if [ "$python_major" -ge 3 ] && [ "$python_minor" -ge 11 ]; then
+        NEED_VENV=true
+    fi
+elif [ "$OS" = "linux" ]; then
+    # Ubuntu 23.04+ and Debian 12+ need venv
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        if [[ "$ID" == "ubuntu" && "$VERSION_ID" > "23" ]] || \
+           [[ "$ID" == "debian" && "$VERSION_ID" -ge "12" ]] || \
+           [ "$python_major" -ge 3 ] && [ "$python_minor" -ge 11 ]; then
+            NEED_VENV=true
+        fi
+    fi
+fi
+
+# Test if pip install works without venv
+if [ "$NEED_VENV" = false ]; then
+    echo "Testing pip installation method..."
+    if ! pip3 install --dry-run aiohttp &> /dev/null; then
+        echo "System requires virtual environment"
+        NEED_VENV=true
+    fi
+fi
+
+# Setup virtual environment if needed
+if [ "$NEED_VENV" = true ]; then
+    echo
+    echo "Setting up Python virtual environment..."
+    echo "(Required for modern Python on this system)"
+    
+    # Check if python3-venv is installed (Linux only)
+    if [ "$OS" = "linux" ]; then
+        if ! python3 -m venv --help &> /dev/null; then
+            echo
+            echo "Error: python3-venv is not installed"
+            echo "Install with: sudo apt install python3-venv python3-full"
+            exit 1
+        fi
+    fi
+    
+    if [ ! -d "venv" ]; then
+        python3 -m venv venv
+        echo "✓ Created virtual environment"
+    else
+        echo "✓ Virtual environment already exists"
+    fi
+    
+    # Activate virtual environment
+    source venv/bin/activate
+    echo "✓ Activated virtual environment"
+    
+    # Upgrade pip in venv
+    pip install --upgrade pip > /dev/null 2>&1
+    
+    # Install dependencies
+    echo
+    echo "Installing Python dependencies in virtual environment..."
+    pip install -r requirements.txt
+else
+    # Try installing without venv (older systems)
+    echo
+    echo "Installing Python dependencies..."
+    
+    if ! pip3 --version &> /dev/null; then
+        echo "Error: pip3 is not installed"
+        echo "Install with: sudo apt install python3-pip"
+        exit 1
+    fi
+    
+    # Try regular install, fall back to --user if needed
+    if pip3 install -r requirements.txt 2>/dev/null; then
+        echo "✓ Installed system-wide"
+    elif pip3 install --user -r requirements.txt 2>/dev/null; then
+        echo "✓ Installed for current user"
+    else
+        echo "Error: Could not install dependencies"
+        echo "Try creating a virtual environment manually:"
+        echo "  python3 -m venv venv"
+        echo "  source venv/bin/activate"
+        echo "  pip install -r requirements.txt"
+        exit 1
+    fi
+fi
 
 echo
 echo "✓ Dependencies installed"
@@ -151,13 +263,37 @@ echo "  Download directory: $download_path"
 echo "  Concurrent downloads: ${concurrent:-15}"
 echo "  Database: $download_path/download_state.db"
 echo "  Log file: $download_path/download.log"
+
+if [ "$NEED_VENV" = true ]; then
+    echo "  Python: Virtual environment (venv/)"
+    echo
+    echo "⚠️  IMPORTANT - Python Virtual Environment:"
+    echo "  Before running any Python scripts, activate the virtual environment:"
+    echo
+    echo "    source venv/bin/activate"
+    echo
+    echo "  Or use the provided wrapper scripts (they activate automatically):"
+    echo "    ./run.sh          - Start downloader"
+    echo "    ./status.sh       - Check status"
+    echo "    ./maintain.sh     - Maintenance commands"
+fi
 echo
 echo "Next steps:"
 echo "  1. Start downloading:"
-echo "     ./wikimedia_downloader.py"
+if [ "$NEED_VENV" = true ]; then
+    echo "     ./run.sh"
+    echo "     (or: source venv/bin/activate && ./wikimedia_downloader.py)"
+else
+    echo "     ./wikimedia_downloader.py"
+fi
 echo
 echo "  2. Check status:"
-echo "     ./check_status.py"
+if [ "$NEED_VENV" = true ]; then
+    echo "     ./status.sh"
+    echo "     (or: source venv/bin/activate && ./check_status.py)"
+else
+    echo "     ./check_status.py"
+fi
 echo "     or"
 echo "     ./maintain.sh status"
 echo
