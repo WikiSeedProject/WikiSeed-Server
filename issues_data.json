@@ -1,0 +1,298 @@
+{
+  "issues": [
+    {
+      "title": "Controller Container Missing from Architecture Diagram",
+      "priority": "critical",
+      "labels": ["documentation", "architecture", "bug"],
+      "body": "**Priority:** Critical\n**File:** claude.md:18-28\n\n## Description\n\nThe container architecture diagram is missing the Controller container, even though it's listed in the container responsibilities section (line 31).\n\n## Current State\n\n```\n┌─────────────────────────────────────┐\n│ WikiSeed Ecosystem                  │\n├─────────────┬──────────┬────────────┤\n│   Scraper   │Downloader│  Creator   │\n├─────────────┼──────────┼────────────┤\n│   Seeder    │ Sharing  │   Web UI   │\n├─────────────┴──────────┴────────────┤\n│         PostgreSQL Database         │\n└─────────────────────────────────────┘\n```\n\n## Expected\n\nAdd Controller to the diagram as an orchestration layer above or alongside other containers.\n\n## Impact\n\n- Architectural understanding is unclear\n- New contributors won't understand Controller's role in the system\n- Diagram doesn't match implementation plan"
+    },
+    {
+      "title": "Shared Directory Distribution Strategy Undefined",
+      "priority": "critical",
+      "labels": ["architecture", "documentation", "needs-decision"],
+      "body": "**Priority:** Critical\n**File:** claude.md:226-251\n\n## Description\n\nThe project structure shows a `shared/` directory containing common code (database.py, models.py, utils.py), but there's no explanation of how this code is distributed to the individual Docker containers.\n\n## Questions\n\n- Is shared code copied into each Docker image at build time?\n- Is it mounted as a volume at runtime?\n- Is it published as an internal Python package?\n- How do changes to shared code get deployed?\n\n## Impact\n\n- Cannot design Docker build process without this information\n- Hot-reload strategy unclear for development\n- Deployment strategy is ambiguous\n- Container interdependencies not defined\n\n## Recommendation\n\nDocument the complete strategy for shared code distribution, including:\n1. Build-time vs runtime distribution\n2. Version synchronization across containers\n3. Update/deployment process\n4. Development hot-reload implications"
+    },
+    {
+      "title": "Database Schema Not Defined",
+      "priority": "critical",
+      "labels": ["database", "documentation", "blocker"],
+      "body": "**Priority:** Critical\n**File:** claude.md (Controller + Database Foundation section)\n\n## Description\n\nNo database schema is defined in the documentation. Tables, columns, types, constraints, and relationships are not specified.\n\n## Missing Information\n\n- Table definitions (jobs, dumps, torrents, metrics, etc.)\n- Column names and types\n- Primary keys and foreign keys\n- Indexes (critical for performance)\n- Constraints (unique, not null, check constraints)\n- Relationships between tables\n\n## Impact\n\n- Cannot begin implementation without schema\n- Database migration strategy cannot be planned\n- Query optimization cannot be designed\n- ORM models cannot be created\n\n## Recommendation\n\nAdd a complete database schema section including:\n1. ERD (Entity Relationship Diagram)\n2. CREATE TABLE statements or equivalent\n3. Index definitions for high-traffic queries\n4. Sample data for testing"
+    },
+    {
+      "title": "No Database Backup Strategy Defined",
+      "priority": "critical",
+      "labels": ["database", "operations", "disaster-recovery"],
+      "body": "**Priority:** Critical\n**File:** claude.md (missing section)\n\n## Description\n\nThe system will store critical preservation data, torrent metadata, job state, and metrics in PostgreSQL, but there's no backup or disaster recovery strategy defined.\n\n## Missing Information\n\n- Backup frequency (hourly, daily, weekly?)\n- Backup retention policy\n- Backup storage location\n- Point-in-time recovery capability\n- Restore testing procedures\n- Hot backup vs cold backup strategy\n\n## Impact\n\n- Risk of catastrophic data loss\n- No recovery plan if database corrupted\n- Production deployment would be risky\n- Cannot calculate storage requirements for backups\n\n## Recommendation\n\nAdd database backup section covering:\n1. Automated backup schedule\n2. Retention policy (e.g., 7 daily, 4 weekly, 12 monthly)\n3. Backup verification process\n4. Documented restore procedure\n5. Disaster recovery RTO/RPO targets"
+    },
+    {
+      "title": "Database Polling Efficiency Not Addressed",
+      "priority": "critical",
+      "labels": ["performance", "architecture", "needs-decision"],
+      "body": "**Priority:** Critical\n**File:** claude.md:329-333\n\n## Description\n\nThe inter-container communication strategy relies on database polling, but critical efficiency details are missing.\n\n## Current Specification\n\n```\n- Each container polls the `jobs` table for work\n```\n\n## Missing Information\n\n- Polling interval (every second? 5 seconds? minute?)\n- Jitter/randomization to avoid thundering herd\n- How to handle high-frequency job creation\n- Database load under polling\n\n## Impact\n\n- Could cause high database load at scale\n- All containers polling simultaneously causes spikes\n- Inefficient use of resources\n- Potential race conditions\n\n## Recommendations\n\nEither:\n1. Specify polling intervals with jitter (e.g., \"every 5-10 seconds with random offset\")\n2. Switch to PostgreSQL LISTEN/NOTIFY for event-driven architecture\n3. Implement hybrid: polling with backoff when idle, NOTIFY for high-priority jobs"
+    },
+    {
+      "title": "Database Indexes Not Specified",
+      "priority": "critical",
+      "labels": ["database", "performance", "blocker"],
+      "body": "**Priority:** Critical\n**File:** claude.md (missing from schema section)\n\n## Description\n\nJob assignment queries will run frequently, but no indexes are defined. Without proper indexes, job polling will become slow as the job table grows.\n\n## Critical Queries Needing Indexes\n\n- Finding pending jobs by type: `WHERE job_type = ? AND status = 'pending'`\n- Finding assigned jobs by container: `WHERE assigned_to = ? AND status = 'assigned'`\n- Finding jobs by dump/torrent: `WHERE dump_id = ?`\n- Sorting jobs by creation time: `ORDER BY created_at`\n\n## Impact\n\n- Slow job assignment as table grows\n- High database CPU usage\n- Query timeouts at scale\n- Poor system performance\n\n## Recommendation\n\nDefine indexes for all high-traffic queries:\n```sql\nCREATE INDEX idx_jobs_type_status ON jobs(job_type, status);\nCREATE INDEX idx_jobs_assigned_to ON jobs(assigned_to, status);\nCREATE INDEX idx_jobs_dump_id ON jobs(dump_id);\nCREATE INDEX idx_jobs_created_at ON jobs(created_at);\n```"
+    },
+    {
+      "title": "Version Requirements Not Specified",
+      "priority": "critical",
+      "labels": ["documentation", "dependencies", "blocker"],
+      "body": "**Priority:** Critical\n**File:** claude.md:195-214\n\n## Description\n\nThe technical stack is defined, but no version requirements are specified for any component.\n\n## Missing Version Requirements\n\n- Python (3.9+? 3.10+? 3.11+? 3.12+?)\n- PostgreSQL (13+? 14+? 15+? 16+?)\n- Node.js (for React build)\n- Docker\n- docker-compose\n- Flask\n- SQLAlchemy\n- Alembic\n- React\n- Chart.js\n\n## Impact\n\n- Environment setup unclear\n- Compatibility issues likely\n- Dependency conflicts\n- Cannot create Dockerfile without knowing base image version\n- Cannot test in CI without knowing what to install\n\n## Recommendation\n\nAdd a \"Version Requirements\" section specifying:\n```yaml\nPython: \">=3.11\"\nPostgreSQL: \">=15\"\nNode.js: \">=18\"\nDocker: \">=24.0\"\ndocker-compose: \">=2.20\"\n```"
+    },
+    {
+      "title": "Secrets Management Strategy Not Defined",
+      "priority": "critical",
+      "labels": ["security", "configuration", "blocker"],
+      "body": "**Priority:** Critical\n**File:** claude.md:169-183\n\n## Description\n\nThe system will need API keys and credentials (Internet Archive, torrent sites), but there's no secrets management strategy defined.\n\n## Missing Information\n\n- How are secrets stored?\n- Are they in YAML config files? (security risk!)\n- Environment variables?\n- Secrets vault (HashiCorp Vault, Docker secrets)?\n- How are secrets rotated?\n- How are secrets backed up?\n\n## Security Concerns\n\n- Secrets in YAML files could be committed to git\n- Secrets in config files visible in container filesystem\n- No rotation mechanism\n- No audit trail of secret access\n\n## Impact\n\n- Major security vulnerability\n- Cannot deploy to production safely\n- Risk of credential leaks\n- Compliance issues\n\n## Recommendation\n\nAdd secrets management section covering:\n1. Use Docker secrets or environment variables\n2. Never store secrets in YAML files\n3. Document secret rotation procedures\n4. Implement secret scanning in CI/CD\n5. Use separate secrets for dev/staging/prod"
+    },
+    {
+      "title": "Job Quarantine Max Retries Not Defined",
+      "priority": "moderate",
+      "labels": ["documentation", "job-queue"],
+      "body": "**Priority:** Moderate\n**File:** claude.md:324\n\n## Description\n\nThe documentation mentions quarantining jobs after \"maximum retry attempts\" but doesn't specify what the maximum is.\n\n## Current Text\n\n```\n- Quarantine jobs after maximum retry attempts\n```\n\n## Context\n\n- Chunk retries are specified as \"max 3 attempts per chunk\" (line 71)\n- Job-level retries are mentioned but not quantified\n\n## Impact\n\n- Implementation ambiguity\n- Cannot estimate failure handling behavior\n- Testing strategy unclear\n\n## Recommendation\n\nSpecify job-level retry count, e.g.:\n```\n- Quarantine jobs after 5 failed attempts with exponential backoff\n```"
+    },
+    {
+      "title": "Configuration Backup/Rollback Mechanism Missing",
+      "priority": "moderate",
+      "labels": ["configuration", "operations", "enhancement"],
+      "body": "**Priority:** Moderate\n**File:** claude.md:169-183\n\n## Description\n\nConfiguration changes are validated and applied gracefully, but there's no backup, versioning, or rollback capability defined.\n\n## Missing Features\n\n- Configuration versioning\n- Configuration backup before changes\n- Rollback to previous configuration\n- Configuration change history/audit log\n\n## Risk\n\n- Bad configuration change could break system\n- No way to undo changes\n- No history of what changed when\n\n## Recommendation\n\nAdd configuration management features:\n1. Auto-backup config before applying changes\n2. Keep last N configuration versions\n3. Web UI \"Rollback\" button\n4. Configuration change audit log"
+    },
+    {
+      "title": "No CI/CD Pipeline Defined",
+      "priority": "moderate",
+      "labels": ["devops", "documentation", "enhancement"],
+      "body": "**Priority:** Moderate\n**File:** claude.md:215-274\n\n## Description\n\nDevelopment workflow is documented, but there's no CI/CD pipeline specification.\n\n## Missing Information\n\n- GitHub Actions workflows?\n- Automated testing on PR?\n- Automated builds?\n- Container image publishing?\n- Deployment automation?\n\n## Impact\n\n- Manual testing burden\n- No automated quality checks\n- Risk of breaking changes\n- Slow development feedback loop\n\n## Recommendation\n\nAdd CI/CD section covering:\n1. GitHub Actions for automated testing\n2. Lint and type checking on every PR\n3. Automated Docker image builds\n4. Integration test suite\n5. Deployment automation"
+    },
+    {
+      "title": "Test Coverage Requirements Missing",
+      "priority": "moderate",
+      "labels": ["testing", "documentation", "quality"],
+      "body": "**Priority:** Moderate\n**File:** claude.md:260-274\n\n## Description\n\nTesting strategy mentions unit and integration tests, but no coverage requirements or quality gates defined.\n\n## Missing Information\n\n- Minimum code coverage target (80%? 90%?)\n- Coverage measurement tools (coverage.py?)\n- PR merge requirements\n- Coverage reporting\n\n## Impact\n\n- No quality baseline\n- Cannot enforce testing standards\n- Technical debt may accumulate\n\n## Recommendation\n\nSpecify test coverage requirements:\n```\n- Minimum 80% line coverage for all containers\n- 100% coverage for shared utilities\n- Coverage reports in CI/CD\n- Block PR merge if coverage decreases\n```"
+    },
+    {
+      "title": "Code Quality Tools Not Specified",
+      "priority": "moderate",
+      "labels": ["devops", "documentation", "quality"],
+      "body": "**Priority:** Moderate\n**File:** claude.md:215-274\n\n## Description\n\nPython backend is defined but no code quality tools specified (linters, formatters, type checkers).\n\n## Missing Tools\n\n- Code formatter (black, autopep8?)\n- Linter (pylint, flake8, ruff?)\n- Type checker (mypy?)\n- Import sorter (isort?)\n- Pre-commit hooks?\n\n## Impact\n\n- Inconsistent code style\n- No static analysis\n- Type errors not caught\n- Code review friction\n\n## Recommendation\n\nAdd code quality tools section:\n```yaml\nFormatter: black\nLinter: ruff\nType Checker: mypy\nImport Sorter: isort\nPre-commit: yes\n```"
+    },
+    {
+      "title": "RSS Feed Format Not Specified",
+      "priority": "moderate",
+      "labels": ["documentation", "distribution"],
+      "body": "**Priority:** Moderate\n**File:** claude.md:135-150\n\n## Description\n\nRSS feeds are listed as a distribution method, but no format or structure is specified.\n\n## Missing Information\n\n- RSS feed URL structure\n- Feed update frequency\n- What information is included in feed items?\n- RSS vs Atom format?\n- Feed discovery mechanism\n\n## Impact\n\n- Cannot implement RSS without spec\n- Users won't know how to subscribe\n- Feed format unclear\n\n## Recommendation\n\nAdd RSS feed specification:\n```xml\nExample feed structure:\n- Title: WikiSeed - New Wikimedia Torrents\n- Update frequency: Daily\n- Item format: Torrent name, size, date, magnet link\n```"
+    },
+    {
+      "title": "Log Retention After 90 Days Unclear",
+      "priority": "moderate",
+      "labels": ["documentation", "operations", "monitoring"],
+      "body": "**Priority:** Moderate\n**File:** claude.md:162\n\n## Description\n\nLogs have 90-day retention, but what happens after 90 days is not specified.\n\n## Current Text\n\n```\n- **Operation logs**: Structured logging with 90-day retention\n```\n\n## Missing Information\n\n- Archive to cold storage?\n- Compress and keep?\n- Delete permanently?\n- Different retention for different log levels?\n\n## Impact\n\n- Storage planning unclear\n- Compliance requirements unknown\n- Cannot estimate storage needs\n\n## Recommendation\n\nSpecify complete log lifecycle:\n```\n- 90-day retention in hot storage\n- Compress and archive to cold storage for 1 year\n- Delete after 1 year total retention\n- Critical errors retained indefinitely\n```"
+    },
+    {
+      "title": "Storage Threshold Logic Unclear",
+      "priority": "moderate",
+      "labels": ["documentation", "storage", "clarification-needed"],
+      "body": "**Priority:** Moderate\n**File:** claude.md:44-47\n\n## Description\n\nStorage thresholds seem backwards: cleanup triggers at 85% but pause at 90%.\n\n## Current Text\n\n```\n- Queue pause: 90% (finish active downloads, stop new downloads)\n- Cleanup trigger: 85% (start cleanup process)\n```\n\n## Question\n\nWhy trigger cleanup at a lower threshold than pause? Typically cleanup would trigger first, then pause if cleanup can't free enough space.\n\n## Recommendation\n\nClarify the intended workflow:\n- Option A: Cleanup at 85%, if it fails and reaches 90%, then pause\n- Option B: Actually meant to be cleanup at 90%, pause at 95%\n- Document the complete threshold logic flow"
+    },
+    {
+      "title": "Job Assignment Race Condition Prevention Not Documented",
+      "priority": "moderate",
+      "labels": ["database", "architecture", "concurrency"],
+      "body": "**Priority:** Moderate\n**File:** claude.md:276-356\n\n## Description\n\nMultiple containers poll for jobs, but race condition prevention is not documented.\n\n## Problem\n\nTwo containers could simultaneously:\n1. SELECT same pending job\n2. Both UPDATE it to assigned\n3. Both start working on it\n\n## Missing Information\n\n- Pessimistic locking (SELECT FOR UPDATE)?\n- Optimistic locking (version number)?\n- Unique constraints?\n- Transaction isolation level?\n\n## Impact\n\n- Duplicate work\n- Wasted resources\n- Data corruption risk\n\n## Recommendation\n\nDocument race condition prevention:\n```sql\n-- Use SELECT FOR UPDATE SKIP LOCKED\nSELECT * FROM jobs\nWHERE status = 'pending' AND job_type = ?\nORDER BY created_at\nLIMIT 1\nFOR UPDATE SKIP LOCKED;\n```"
+    },
+    {
+      "title": "Frontend Build Process Not Defined",
+      "priority": "moderate",
+      "labels": ["documentation", "frontend"],
+      "body": "**Priority:** Moderate\n**File:** claude.md:195-214\n\n## Description\n\nReact frontend is mentioned, but build process and tooling are not specified.\n\n## Missing Information\n\n- Build tool (webpack, vite, esbuild, create-react-app?)\n- Development server\n- Production build process\n- Asset optimization\n- Bundle size targets\n\n## Impact\n\n- Cannot set up frontend development\n- Build process unclear\n- Optimization strategy unknown\n\n## Recommendation\n\nAdd frontend build section:\n```\nBuild Tool: Vite\nDev Server: Vite dev server with HMR\nBuild: Static assets bundled in Web UI container\nBundle Size Target: <500KB gzipped\n```"
+    },
+    {
+      "title": "Fragile External Dependency on WikiStats URL",
+      "priority": "moderate",
+      "labels": ["reliability", "architecture", "risk"],
+      "body": "**Priority:** Moderate\n**File:** claude.md:187\n\n## Description\n\nAuto-discovery relies on a specific WikiStats URL that could change.\n\n## Current Text\n\n```\nWeekly scans of https://wikistats.wmcloud.org/wikimedias_wiki.php\n```\n\n## Risks\n\n- URL could change\n- Service could be discontinued\n- Format could change\n- Network issues\n\n## Impact\n\n- Discovery could break\n- No fallback mechanism\n- Manual intervention required\n\n## Recommendation\n\nAdd fallback discovery methods:\n1. Primary: WikiStats API\n2. Secondary: Wikimedia site matrix API\n3. Tertiary: Manual project addition via Web UI\n4. Cache last successful discovery result"
+    },
+    {
+      "title": "Job Progress Tracking Not Defined",
+      "priority": "moderate",
+      "labels": ["enhancement", "job-queue", "ux"],
+      "body": "**Priority:** Moderate\n**File:** claude.md:276-356\n\n## Description\n\nJob system tracks state (pending, assigned, in_progress, completed), but no progress tracking within jobs.\n\n## Missing Feature\n\nCannot show:\n- \"Download 45% complete\"\n- \"Processed 1000 of 5000 files\"\n- \"ETA: 2 hours remaining\"\n\n## Impact\n\n- Poor user experience\n- Cannot estimate completion time\n- Cannot prioritize based on progress\n\n## Recommendation\n\nAdd job progress fields:\n```python\nprogress_current: int  # e.g., bytes downloaded\nprogress_total: int    # e.g., total bytes\nprogress_percent: float  # calculated\neta_seconds: int       # estimated time remaining\n```"
+    },
+    {
+      "title": "Typo: 'orgnization' should be 'organization'",
+      "priority": "minor",
+      "labels": ["documentation", "typo"],
+      "body": "**Priority:** Minor\n**File:** claude.md:48\n\n## Description\n\nTypo in file organization description.\n\n## Current Text\n\n```\n- **File organization**: Same as torrent file orgnization\n```\n\n## Fix\n\n```\n- **File organization**: Same as torrent file organization\n```"
+    },
+    {
+      "title": "Typo: 'Languauge' should be 'Language'",
+      "priority": "minor",
+      "labels": ["documentation", "typo"],
+      "body": "**Priority:** Minor\n**File:** claude.md:125\n\n## Description\n\nTypo in sources.txt format example.\n\n## Current Text\n\n```\nLanguauge: en\n```\n\n## Fix\n\n```\nLanguage: en\n```"
+    },
+    {
+      "title": "Typo: 'Stauts' should be 'Status'",
+      "priority": "minor",
+      "labels": ["documentation", "typo"],
+      "body": "**Priority:** Minor\n**File:** claude.md:132\n\n## Description\n\nTypo in sources.txt format example.\n\n## Current Text\n\n```\nArchived Stauts JSON: https://archive.ph/def456\n```\n\n## Fix\n\n```\nArchived Status JSON: https://archive.ph/def456\n```"
+    },
+    {
+      "title": "Tree Structure Formatting Error",
+      "priority": "minor",
+      "labels": ["documentation", "formatting"],
+      "body": "**Priority:** Minor\n**File:** claude.md:98\n\n## Description\n\nBroken tree structure in torrent content example.\n\n## Current Text\n\n```\n├── wikipedia/                  #project\n│   ├── en                      #language\n│    ── ├── [dump_files]\n```\n\n## Fix\n\n```\n├── wikipedia/                  #project\n│   └── en/                     #language\n│       └── [dump_files]\n```"
+    },
+    {
+      "title": "Inconsistent Naming: WikiSeed vs wikiseed",
+      "priority": "minor",
+      "labels": ["documentation", "consistency"],
+      "body": "**Priority:** Minor\n**File:** claude.md:227\n\n## Description\n\nRepository is called WikiSeed but directory structure shows wikiseed/ (lowercase).\n\n## Current\n\n```\nwikiseed/\n├── docker-compose.dev.yml\n```\n\n## Recommendation\n\nUse consistent naming throughout. Recommend lowercase for directories:\n- Repository: WikiSeed\n- Directory: wikiseed/\n- Docker images: wikiseed/controller, wikiseed/scraper, etc."
+    },
+    {
+      "title": "Date Format Inconsistency",
+      "priority": "minor",
+      "labels": ["documentation", "consistency"],
+      "body": "**Priority:** Minor\n**File:** claude.md:90-106\n\n## Description\n\nDate format specified as template but example shows different format.\n\n## Template (line 90)\n\n```\n\"Wikimedia Complete - [Month Year]\"\n```\n\n## Example (line 106)\n\n```\n# WikiSeed Torrent Dump Checksums - June 2025\n```\n\n## Recommendation\n\nSpecify exact format standard:\n- Prefer: \"June 2025\" (human-readable)\n- Or: \"2025-06\" (ISO 8601)\n- Document the chosen standard"
+    },
+    {
+      "title": "Web UI vs wikiseed.app Naming Confusion",
+      "priority": "minor",
+      "labels": ["documentation", "clarification-needed"],
+      "body": "**Priority:** Minor\n**File:** claude.md:37\n\n## Description\n\nContainer list shows both \"Web UI\" and \"wikiseed.app\" but it's unclear if these are the same thing or different.\n\n## Current Text\n\n```\n- **wikiseed.app**: Public status page; will be hosted in cloud\n```\n\nEarlier mention:\n```\n│   Seeder    │ Sharing  │   Web UI   │\n```\n\n## Question\n\nAre these the same or different components?\n- Web UI = internal admin interface\n- wikiseed.app = public status page\n\n## Recommendation\n\nClarify the distinction or consolidate naming."
+    },
+    {
+      "title": "Exponential Backoff Parameters Missing",
+      "priority": "minor",
+      "labels": ["documentation", "error-handling"],
+      "body": "**Priority:** Minor\n**File:** claude.md:75\n\n## Description\n\nExponential backoff mentioned but parameters not specified.\n\n## Current Text\n\n```\n- **Automatic retry**: Re-upload failed uploads with exponential backoff\n```\n\n## Missing\n\n- Initial delay (1 second? 5 seconds?)\n- Multiplier (2x? 3x?)\n- Max delay (1 hour? 24 hours?)\n- Max attempts (3? 5? 10?)\n\n## Recommendation\n\nSpecify backoff parameters:\n```\nExponential backoff: 30s, 60s, 120s, 240s (max 4 attempts)\n```"
+    },
+    {
+      "title": "Chunk Retry Delay Not Specified",
+      "priority": "minor",
+      "labels": ["documentation", "error-handling"],
+      "body": "**Priority:** Minor\n**File:** claude.md:71\n\n## Description\n\nChunk retry max attempts specified, but delay between retries is not.\n\n## Current Text\n\n```\n- **Automatic retry**: Re-download failed chunks (max 3 attempts per chunk)\n```\n\n## Missing\n\n- Delay between retries\n- Backoff strategy\n\n## Recommendation\n\nAdd retry delay:\n```\nRe-download failed chunks (max 3 attempts with 5s, 15s, 30s delays)\n```"
+    },
+    {
+      "title": "Job State Machine Diagram Clarity",
+      "priority": "minor",
+      "labels": ["documentation", "visualization"],
+      "body": "**Priority:** Minor\n**File:** claude.md:313-317\n\n## Description\n\nState machine diagram arrow directions are unclear.\n\n## Current\n\n```\npending → assigned → in_progress → completed\n    ↓         ↓           ↓\n  failed ← failed ← failed (with retry logic)\n```\n\n## Issue\n\nThe bottom arrows pointing left are confusing. Does each state transition to failed, or does failed loop back?\n\n## Recommendation\n\nImprove diagram:\n```\n           ┌─────────┐\n           │ pending │\n           └────┬────┘\n                │\n           ┌────▼────┐\n        ┌──│assigned │──┐\n        │  └─────────┘  │\n        │               │\n        ▼               ▼\n  ┌──────────┐    ┌────────┐\n  │in_progress│    │ failed │◄─┐\n  └─────┬────┘    └────┬───┘  │\n        │              │       │\n        ▼              └───────┘\n   ┌─────────┐         (retry)\n   │completed│\n   └─────────┘\n```"
+    },
+    {
+      "title": "How Are Dumps Spanning Multiple Months Categorized?",
+      "priority": "question",
+      "labels": ["question", "torrents", "clarification-needed"],
+      "body": "**Priority:** Question\n**File:** claude.md:89-91\n\n## Question\n\nIf a dump is published on June 30 but downloaded/processed on July 2, which monthly torrent does it go in?\n- June (dump date)\n- July (processing date)\n- Both (hard links)\n\n## Impact\n\n- Torrent organization logic\n- File categorization rules\n\n## Needs\n\nDecision on categorization logic"
+    },
+    {
+      "title": "What If Internet Archive Upload Fails?",
+      "priority": "question",
+      "labels": ["question", "distribution", "error-handling"],
+      "body": "**Priority:** Question\n**File:** claude.md:135-150\n\n## Question\n\nArchive process step 3 is \"Upload torrent archive to Internet Archive\", step 4 is \"Create torrent with IA as web seed\".\n\nWhat happens if step 3 fails?\n- Can torrent still be created without webseed?\n- Does process halt?\n- Retry later?\n\n## Impact\n\n- Error recovery flow\n- Torrent distribution strategy\n\n## Needs\n\nDecision on failure handling"
+    },
+    {
+      "title": "How Are Hard Links Maintained Across Torrent Groupings?",
+      "priority": "question",
+      "labels": ["question", "torrents", "storage"],
+      "body": "**Priority:** Question\n**File:** claude.md:87-88\n\n## Question\n\nMultiple torrent groupings use hard links to avoid file duplication. What happens if:\n- One torrent is deleted by user?\n- One torrent is moved?\n- Hard link count goes to zero?\n\n## Impact\n\n- Data integrity\n- Storage management\n- Cleanup logic\n\n## Needs\n\nHard link management strategy"
+    },
+    {
+      "title": "What Happens to Dumps Larger Than Total Available Storage?",
+      "priority": "question",
+      "labels": ["question", "storage", "edge-case"],
+      "body": "**Priority:** Question\n**File:** claude.md:40-64\n\n## Question\n\nIf a single dump file is larger than available storage (e.g., 20TB dump but only 18TB storage):\n- Skip it?\n- Download partial?\n- Alert user?\n- Queue for manual handling?\n\n## Impact\n\n- Storage planning\n- Edge case handling\n- User experience\n\n## Needs\n\nPolicy decision"
+    },
+    {
+      "title": "Are Yearly History Dumps Separate Files?",
+      "priority": "question",
+      "labels": ["question", "torrents", "storage"],
+      "body": "**Priority:** Question\n**File:** claude.md:91\n\n## Question\n\n`\"Wikimedia Complete with History - [Year]\"` - are these:\n- A. Separate full history dumps (completely different files)\n- B. Hard links to monthly dumps (same files, different torrent)\n- C. Incremental history on top of monthly dumps\n\n## Impact\n\n- Storage requirements (significantly different for A vs B)\n- Download strategy\n- Torrent creation logic\n\n## Needs\n\nClarification on history dump strategy"
+    },
+    {
+      "title": "How Are Partial Downloads Handled During Cleanup?",
+      "priority": "question",
+      "labels": ["question", "storage", "downloads"],
+      "body": "**Priority:** Question\n**File:** claude.md:40-64\n\n## Question\n\nStorage cleanup is triggered, but there are in-progress downloads. What happens to partial files?\n- Protected from cleanup?\n- Deleted and restarted later?\n- Completed before cleanup?\n\n## Impact\n\n- Download efficiency\n- Storage calculation\n- Cleanup logic\n\n## Needs\n\nPolicy decision"
+    },
+    {
+      "title": "How Are In-Progress Downloads Protected During Cleanup?",
+      "priority": "question",
+      "labels": ["question", "storage", "concurrency"],
+      "body": "**Priority:** Question\n**File:** claude.md:40-64\n\n## Question\n\nRelated to partial downloads but broader: Are active downloads protected from cleanup process?\n- Lock files?\n- Database flag?\n- Separate directory?\n\n## Impact\n\n- Data integrity\n- Concurrency control\n- Cleanup safety\n\n## Needs\n\nProtection mechanism specification"
+    },
+    {
+      "title": "What If dumpstatus.json Is Unavailable?",
+      "priority": "question",
+      "labels": ["question", "downloads", "error-handling"],
+      "body": "**Priority:** Question\n**File:** claude.md:56\n\n## Question\n\n\"Parse dumpstatus.json for accurate file sizes\" - what if:\n- File doesn't exist?\n- File is corrupted?\n- File is incomplete?\n\n## Impact\n\n- Pre-download space checks\n- Download reliability\n- Fallback strategy\n\n## Needs\n\nFallback mechanism specification"
+    },
+    {
+      "title": "What Happens to Quarantined Files?",
+      "priority": "question",
+      "labels": ["question", "error-handling", "operations"],
+      "body": "**Priority:** Question\n**File:** claude.md:76\n\n## Question\n\n\"Per-file quarantine: Skip problematic files, retry next cycle\"\n\nFollow-up questions:\n- Where are quarantined files tracked?\n- How long until retry?\n- Are there alerts/notifications?\n- Manual review process?\n- Automatic unquarantine conditions?\n\n## Impact\n\n- Operations procedures\n- Monitoring requirements\n- Recovery workflow\n\n## Needs\n\nComplete quarantine workflow specification"
+    },
+    {
+      "title": "How Are Discontinued Wikimedia Projects Handled?",
+      "priority": "question",
+      "labels": ["question", "future-proofing", "preservation"],
+      "body": "**Priority:** Question\n**File:** claude.md:184-194\n\n## Question\n\nIf Wikimedia discontinues a project:\n- Keep seeding forever?\n- Special \"archived projects\" category?\n- Different preservation rules?\n- Still included in new torrents?\n\n## Impact\n\n- Long-term preservation strategy\n- Storage allocation\n- Torrent organization\n\n## Needs\n\nArchival policy for discontinued projects"
+    },
+    {
+      "title": "What Happens If WikiStats Becomes Unavailable?",
+      "priority": "question",
+      "labels": ["question", "reliability", "auto-discovery"],
+      "body": "**Priority:** Question\n**File:** claude.md:187\n\n## Question\n\nAuto-discovery relies on WikiStats. If it becomes unavailable:\n- Use cached list?\n- Fall back to manual?\n- Use alternative API?\n- How long to retry?\n\n## Impact\n\n- Discovery reliability\n- System autonomy\n- Operational burden\n\n## Needs\n\nFallback discovery strategy"
+    },
+    {
+      "title": "What Are Specific Targets for Success Metrics?",
+      "priority": "question",
+      "labels": ["question", "metrics", "goals"],
+      "body": "**Priority:** Question\n**File:** claude.md:389-401\n\n## Question\n\n\"Completeness: At least one copy of every Wikimedia project+language\"\n\nWhat are the specific targets?\n- 95% coverage acceptable or must be 100%?\n- How many seeders per torrent?\n- What upload ratio target?\n- What storage utilization target?\n\n## Impact\n\n- Success definition\n- Resource planning\n- Monitoring alerts\n\n## Needs\n\nSpecific numerical targets"
+    },
+    {
+      "title": "What Is Baseline for 'High Torrent Health'?",
+      "priority": "question",
+      "labels": ["question", "metrics", "torrents"],
+      "body": "**Priority:** Question\n**File:** claude.md:391\n\n## Question\n\n\"Availability: High torrent health across all shared torrents\"\n\nWhat defines \"high torrent health\"?\n- Minimum seeders (5? 10? 50?)\n- Minimum seed ratio (1.0? 2.0?)\n- DHT availability percentage?\n- Response time thresholds?\n\n## Impact\n\n- Monitoring thresholds\n- Alert definitions\n- Success measurement\n\n## Needs\n\nSpecific health metric definitions"
+    },
+    {
+      "title": "What Is Metrics Retention Policy?",
+      "priority": "question",
+      "labels": ["question", "metrics", "storage"],
+      "body": "**Priority:** Question\n**File:** claude.md:151-168\n\n## Question\n\nLogs have 90-day retention. What about metrics?\n- Same 90 days?\n- Different retention?\n- Aggregated over time (hourly → daily → monthly)?\n- Forever?\n\n## Impact\n\n- Storage planning\n- Historical analysis capability\n- Database size\n\n## Needs\n\nMetrics retention policy"
+    },
+    {
+      "title": "How Are Changes to Shared Code Deployed?",
+      "priority": "question",
+      "labels": ["question", "devops", "architecture"],
+      "body": "**Priority:** Question\n**File:** claude.md:226-251\n\n## Question\n\nIf `shared/database.py` is updated:\n- Rebuild all containers?\n- Hot reload?\n- Graceful restart of all containers?\n- Rolling update?\n\n## Impact\n\n- Deployment process\n- Downtime\n- Development workflow\n\n## Needs\n\nDeployment procedure for shared code changes"
+    },
+    {
+      "title": "What Is the Branching Strategy?",
+      "priority": "question",
+      "labels": ["question", "devops", "git"],
+      "body": "**Priority:** Question\n**File:** claude.md:215-274\n\n## Question\n\nNo git workflow defined:\n- Git-flow (develop, feature, release branches)?\n- Trunk-based (direct to main)?\n- GitHub flow (feature branches to main)?\n- Release branches?\n\n## Impact\n\n- Collaboration workflow\n- Release management\n- Code review process\n\n## Needs\n\nGit branching strategy decision"
+    },
+    {
+      "title": "Where Are Docker Images Published?",
+      "priority": "question",
+      "labels": ["question", "devops", "docker"],
+      "body": "**Priority:** Question\n**File:** claude.md:195-214\n\n## Question\n\nNo container registry specified:\n- Docker Hub?\n- GitHub Container Registry (ghcr.io)?\n- Self-hosted registry?\n- Public or private?\n\n## Impact\n\n- Deployment process\n- Image distribution\n- Version management\n\n## Needs\n\nContainer registry decision"
+    },
+    {
+      "title": "What Frontend State Management?",
+      "priority": "question",
+      "labels": ["question", "frontend", "architecture"],
+      "body": "**Priority:** Question\n**File:** claude.md:195-214\n\n## Question\n\nReact frontend specified, but state management unclear:\n- Redux (complex, powerful)?\n- Context API (simple, built-in)?\n- Zustand (lightweight)?\n- MobX?\n- None (local state only)?\n\n## Impact\n\n- Frontend architecture\n- Development complexity\n- State synchronization\n\n## Needs\n\nState management decision"
+    },
+    {
+      "title": "What Is Database Migration Testing Strategy?",
+      "priority": "question",
+      "labels": ["question", "database", "testing"],
+      "body": "**Priority:** Question\n**File:** claude.md:192-193\n\n## Question\n\n\"Automatic migration: Database schema updates handled during WikiSeed updates\"\n\nHow are migrations tested?\n- Staging environment?\n- Migration rollback capability?\n- Data validation after migration?\n- Test migrations on copy of production data?\n\n## Impact\n\n- Upgrade safety\n- Data integrity\n- Downtime during upgrades\n\n## Needs\n\nMigration testing procedure"
+    }
+  ]
+}
