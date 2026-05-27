@@ -1,0 +1,133 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-wikiseed}
+      POSTGRES_USER: ${POSTGRES_USER:-wikiseed}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wikiseed}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  qbittorrent:
+    image: linuxserver/qbittorrent:latest
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-UTC}
+      WEBUI_PORT: 8080
+    volumes:
+      - qbittorrent_config:/config
+      - ${WIKISEED_DATA_DIR}:/downloads
+    ports:
+      - "6881:6881"
+      - "6881:6881/udp"
+      - "8080:8080"
+    restart: unless-stopped
+
+  controller:
+    build: .
+    command: python -m wikiseed.containers.controller
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scraper:
+    build: .
+    command: python -m wikiseed.containers.scraper
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  downloader:
+    build: .
+    command: python -m wikiseed.containers.downloader
+    env_file: .env
+    volumes:
+      - ${WIKISEED_DATA_DIR}:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  creator:
+    build: .
+    command: python -m wikiseed.containers.creator
+    env_file: .env
+    volumes:
+      - ${WIKISEED_DATA_DIR}:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uploader:
+    build: .
+    command: python -m wikiseed.containers.uploader
+    env_file: .env
+    volumes:
+      - ${WIKISEED_DATA_DIR}:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  seeder:
+    build: .
+    command: python -m wikiseed.containers.seeder
+    env_file: .env
+    volumes:
+      - ${WIKISEED_DATA_DIR}:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qbittorrent:
+        condition: service_started
+    restart: unless-stopped
+
+  health_monitor:
+    build: .
+    command: python -m wikiseed.containers.health_monitor
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  storage_manager:
+    build: .
+    command: python -m wikiseed.containers.storage_manager
+    env_file: .env
+    volumes:
+      - ${WIKISEED_DATA_DIR}:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  publisher:
+    build: .
+    command: python -m wikiseed.containers.publisher
+    env_file: .env
+    volumes:
+      - manifest_local:/etc/wikiseed/manifest
+      - ${WIKISEED_DATA_DIR}:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  qbittorrent_config:
+  manifest_local:
