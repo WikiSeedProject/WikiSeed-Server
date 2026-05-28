@@ -1,0 +1,6 @@
+requests>=2.32,<3
+beautifulsoup4>=4.12,<5
+psycopg2-binary>=2.9,<3
+boto3>=1.35,<2
+internetarchive>=4.0,<5
+qbittorrent-api>=2024.0
