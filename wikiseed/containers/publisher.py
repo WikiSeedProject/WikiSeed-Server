@@ -36,48 +36,12 @@ from wikiseed import jobs
 from wikiseed.config import CONFIG
 from wikiseed.db import cursor as db_cursor
 from wikiseed.logging_setup import setup
+from wikiseed.projects import project_from_wiki
 
 logger = logging.getLogger("publisher")
 
 POLL_INTERVAL_SECONDS = 30
 MANIFEST_VERSIONS_RETAINED = 12
-
-# Order matters: longer XML wiki suffixes first.
-_XML_PROJECT_SUFFIXES = (
-    ("wiktionary",  "wiktionary"),
-    ("wikibooks",   "wikibooks"),
-    ("wikinews",    "wikinews"),
-    ("wikiquote",   "wikiquote"),
-    ("wikisource",  "wikisource"),
-    ("wikiversity", "wikiversity"),
-    ("wikivoyage",  "wikivoyage"),
-    ("wiki",        "wikipedia"),
-)
-
-# Wikis whose names end with 'wiki' but are not Wikipedia.
-_SPECIAL_WIKI_PROJECTS = {
-    "commonswiki":   "commons",
-    "metawiki":      "meta",
-    "wikidatawiki":  "wikidata",
-    "specieswiki":   "wikispecies",
-    "mediawikiwiki": "mediawiki",
-    "incubatorwiki": "incubator",
-    "sourceswiki":   "sources",
-    "foundationwiki": "foundation",
-}
-
-
-def _project_from_wiki(wiki: str) -> str:
-    """'enwiki' -> 'wikipedia', 'enwiktionary' -> 'wiktionary'.
-
-    Special-cased multi-project wikis go via _SPECIAL_WIKI_PROJECTS;
-    unrecognized wikis fall back to the name itself."""
-    if wiki in _SPECIAL_WIKI_PROJECTS:
-        return _SPECIAL_WIKI_PROJECTS[wiki]
-    for suffix, project in _XML_PROJECT_SUFFIXES:
-        if wiki.endswith(suffix):
-            return project
-    return wiki
 
 
 def _r2_client():
@@ -179,7 +143,7 @@ def _torrent_to_manifest(t: dict, files: list) -> dict:
 
 def _file_to_manifest(f: dict) -> dict:
     is_zim = f["source_type"] == "zim"
-    project = f["wiki_or_project"] if is_zim else _project_from_wiki(f["wiki_or_project"])
+    project = f["wiki_or_project"] if is_zim else project_from_wiki(f["wiki_or_project"])
     out = {
         "filename": Path(f["wikimedia_url"]).name,
         "wiki": None if is_zim else f["wiki_or_project"],
