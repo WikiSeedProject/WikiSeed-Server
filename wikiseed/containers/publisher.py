@@ -27,12 +27,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-import boto3
 import requests
-from botocore.client import Config as BotoConfig
 from botocore.exceptions import BotoCoreError, ClientError
 
-from wikiseed import jobs
+from wikiseed import jobs, r2
 from wikiseed.config import CONFIG
 from wikiseed.db import cursor as db_cursor
 from wikiseed.logging_setup import setup
@@ -42,19 +40,6 @@ logger = logging.getLogger("publisher")
 
 POLL_INTERVAL_SECONDS = 30
 MANIFEST_VERSIONS_RETAINED = 12
-
-
-def _r2_client():
-    if not (CONFIG.r2_account_id and CONFIG.r2_access_key_id and CONFIG.r2_secret_access_key):
-        return None
-    return boto3.client(
-        "s3",
-        endpoint_url=f"https://{CONFIG.r2_account_id}.r2.cloudflarestorage.com",
-        aws_access_key_id=CONFIG.r2_access_key_id,
-        aws_secret_access_key=CONFIG.r2_secret_access_key,
-        region_name="auto",
-        config=BotoConfig(signature_version="s3v4"),
-    )
 
 
 def _now_iso() -> str:
@@ -171,7 +156,7 @@ def write_local_manifest(manifest: dict) -> Path:
 
 
 def upload_manifest_to_r2(manifest: dict) -> None:
-    c = _r2_client()
+    c = r2.client()
     if c is None:
         logger.warning("R2 not configured, skipping manifest upload")
         return
@@ -386,7 +371,7 @@ def build_ops_status() -> dict:
 def publish_status(payload: dict) -> None:
     public = build_public_status()
     ops = build_ops_status()
-    c = _r2_client()
+    c = r2.client()
     if c is None:
         logger.warning("R2 not configured, skipping status upload")
         return

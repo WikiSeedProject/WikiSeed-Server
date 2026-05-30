@@ -23,20 +23,12 @@ from wikiseed import jobs
 from wikiseed.config import CONFIG
 from wikiseed.db import cursor as db_cursor
 from wikiseed.logging_setup import setup
+from wikiseed.paths import canonical_download_path
 from wikiseed.projects import project_from_wiki
 
 logger = logging.getLogger("uploader")
 
 POLL_INTERVAL_SECONDS = 30
-
-
-def _local_path(dump: dict) -> Path:
-    filename = Path(dump["wikimedia_url"]).name
-    if dump["source_type"] == "xml_current":
-        return CONFIG.data_dir / "xml_current" / dump["wiki_or_project"] / dump["period"] / filename
-    if dump["source_type"] == "xml_history":
-        return CONFIG.data_dir / "xml_history" / dump["wiki_or_project"] / dump["period"] / filename
-    return CONFIG.data_dir / "zim" / dump["wiki_or_project"] / filename
 
 
 def _ia_identifier(dump: dict) -> str:
@@ -103,7 +95,7 @@ def upload(payload: dict) -> None:
     if not (CONFIG.ia_access_key and CONFIG.ia_secret_key):
         raise RuntimeError("IA credentials missing (IA_ACCESS_KEY / IA_SECRET_KEY)")
 
-    local = _local_path(dump)
+    local = canonical_download_path(dump)
     if not local.exists():
         raise RuntimeError(f"local file missing for dump {dump_id}: {local}")
 

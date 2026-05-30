@@ -19,6 +19,7 @@ from wikiseed import jobs
 from wikiseed.config import CONFIG
 from wikiseed.db import cursor as db_cursor
 from wikiseed.logging_setup import setup
+from wikiseed.paths import canonical_download_path
 
 logger = logging.getLogger("downloader")
 
@@ -28,15 +29,6 @@ POLL_INTERVAL_SECONDS = 10
 # ZIM v5/v6 files start with these magic bytes; useful as a structural sanity
 # check since Wikimedia publishes no upstream hash for ZIM.
 ZIM_MAGIC = b"ZIM\x04"
-
-
-def _local_path(dump: dict) -> Path:
-    filename = Path(dump["wikimedia_url"]).name
-    if dump["source_type"] == "xml_current":
-        return CONFIG.data_dir / "xml_current" / dump["wiki_or_project"] / dump["period"] / filename
-    if dump["source_type"] == "xml_history":
-        return CONFIG.data_dir / "xml_history" / dump["wiki_or_project"] / dump["period"] / filename
-    return CONFIG.data_dir / "zim" / dump["wiki_or_project"] / filename
 
 
 def _load_dump(dump_id: int) -> Optional[dict]:
@@ -67,7 +59,7 @@ def download(dump_id: int) -> None:
         logger.info("dump %d already complete, skipping", dump_id)
         return
 
-    dest = _local_path(dump)
+    dest = canonical_download_path(dump)
     dest.parent.mkdir(parents=True, exist_ok=True)
     _set_status(dump_id, "downloading")
 

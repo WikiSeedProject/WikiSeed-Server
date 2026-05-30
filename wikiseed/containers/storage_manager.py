@@ -15,7 +15,7 @@ For each chosen torrent:
 2. Append a `deleted` row to `health_events` for audit.
 3. Enqueue `remove_local_payload` so the seeder can deregister it from
    qBittorrent (no-op while the seeder is a stub).
-4. Unlink the dump files from disk.
+4. Delete the torrent's staging directory and its .torrent file.
 
 The torrent row, magnet link, info hash, and torrent_dumps join rows are
 kept — only the payload is gone. The health monitor keeps tracking it,
@@ -31,6 +31,7 @@ from wikiseed import jobs
 from wikiseed.config import CONFIG
 from wikiseed.db import cursor as db_cursor
 from wikiseed.logging_setup import setup
+from wikiseed.paths import torrent_file_path, torrent_staging_dir
 
 logger = logging.getLogger("storage_manager")
 
@@ -51,17 +52,6 @@ def disk_used_bytes() -> int:
     return shutil.disk_usage(CONFIG.data_dir).used
 
 
-def _local_path(dump: dict) -> Path:
-    """Mirror of downloader._local_path — duplicated to avoid a cross-container
-    import. If the directory layout changes, update both."""
-    filename = Path(dump["wikimedia_url"]).name
-    if dump["source_type"] == "xml_current":
-        return CONFIG.data_dir / "xml_current" / dump["wiki_or_project"] / dump["period"] / filename
-    if dump["source_type"] == "xml_history":
-        return CONFIG.data_dir / "xml_history" / dump["wiki_or_project"] / dump["period"] / filename
-    return CONFIG.data_dir / "zim" / dump["wiki_or_project"] / filename
-
-
 def _select_eligible_oldest() -> list:
     with db_cursor(commit=False) as cur:
         cur.execute(
@@ -74,28 +64,28 @@ def _select_eligible_oldest() -> list:
         return [dict(r) for r in cur.fetchall()]
 
 
-def _torrent_dumps(torrent_id: int) -> list:
-    with db_cursor(commit=False) as cur:
-        cur.execute(
-            """SELECT d.id, d.wikimedia_url, d.source_type,
-                      d.wiki_or_project, d.period, d.zim_scope,
-                      d.filesize_bytes
-               FROM dumps d
-               JOIN torrent_dumps td ON td.dump_id = d.id
-               WHERE td.torrent_id = %s""",
-            (torrent_id,),
-        )
-        return [dict(r) for r in cur.fetchall()]
+def _dir_size(path: Path) -> int:
+    if not path.exists():
+        return 0
+    total = 0
+    for p in path.rglob("*"):
+        try:
+            if p.is_file():
+                total += p.stat().st_size
+        except OSError:
+            continue
+    return total
 
 
 def drop_torrent(torrent: dict) -> int:
     """Delete one torrent's local payload. Returns bytes freed (0 if the
     torrent was already deleted by a concurrent worker)."""
     torrent_id = torrent["id"]
+    torrent_name = torrent["torrent_name"]
 
     # Atomic claim. Re-checks eligible_for_deletion in case the health
-    # monitor revoked it after we read the candidate list; also serves as a
-    # no-op if another worker already dropped this torrent.
+    # monitor revoked it after we read the candidate list; also serves as
+    # a no-op if another worker already dropped this torrent.
     with db_cursor() as cur:
         cur.execute(
             """UPDATE torrents
@@ -111,31 +101,34 @@ def drop_torrent(torrent: dict) -> int:
                         torrent_id)
             return 0
 
-    dumps = _torrent_dumps(torrent_id)
     with db_cursor() as cur:
         cur.execute(
             """INSERT INTO health_events (torrent_id, event_type, notes)
                VALUES (%s, 'deleted', %s)""",
-            (torrent_id, f"storage_manager dropped local payload ({len(dumps)} files)"),
+            (torrent_id, f"storage_manager dropped staging dir for {torrent_name}"),
         )
 
     jobs.enqueue("remove_local_payload", {"torrent_id": torrent_id})
 
-    freed = 0
-    for dump in dumps:
-        path = _local_path(dump)
-        try:
-            if path.exists():
-                size = path.stat().st_size
-                path.unlink()
-                freed += size
-            else:
-                logger.warning("expected file missing for dump %d: %s", dump["id"], path)
-        except OSError as e:
-            logger.warning("could not unlink %s: %s", path, e)
+    staging = torrent_staging_dir(torrent_name)
+    freed = _dir_size(staging)
+    try:
+        if staging.exists():
+            shutil.rmtree(staging)
+    except OSError as e:
+        logger.warning("could not delete staging dir %s: %s", staging, e)
 
-    logger.info("dropped torrent %d (%s): freed %d bytes from %d files",
-                torrent_id, torrent["torrent_name"], freed, len(dumps))
+    # The local .torrent file is small but no point in keeping it — the R2
+    # copy is the canonical one referenced by the manifest.
+    tf = torrent_file_path(torrent_name)
+    try:
+        if tf.exists():
+            freed += tf.stat().st_size
+            tf.unlink()
+    except OSError as e:
+        logger.warning("could not delete %s: %s", tf, e)
+
+    logger.info("dropped torrent %d (%s): freed %d bytes", torrent_id, torrent_name, freed)
     return freed
 
 
