@@ -29,6 +29,7 @@ class Config:
 
     version: str
     user_agent: str
+    torrent_cdn_base: str
 
     health_min_seeders: int
     health_below_threshold_hours: int
@@ -63,6 +64,7 @@ def _load() -> Config:
         storage_budget_bytes=_env_int("STORAGE_BUDGET_BYTES", 20_000_000_000_000),
         version=_env("WIKISEED_VERSION", "1.0"),
         user_agent=_env("WIKISEED_USER_AGENT", "WikiSeed.app/1.0"),
+        torrent_cdn_base=_env("WIKISEED_TORRENT_CDN_BASE", "https://cdn.wikiseed.app/torrents/"),
         health_min_seeders=_env_int("HEALTH_MIN_SEEDERS", 4),
         health_below_threshold_hours=_env_int("HEALTH_BELOW_THRESHOLD_HOURS", 24),
         r2_account_id=_env("R2_ACCOUNT_ID", ""),
