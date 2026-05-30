@@ -10,25 +10,33 @@ in the repo and how to run it.
 
 ## Status
 
-Working:
+All nine containers are implemented:
 
-- Project skeleton, Docker images, docker-compose
-- PostgreSQL schema and job queue
-- Calendar scheduler (`controller`)
-- Discovery of XML current/history dumps and Kiwix ZIM files (`scraper`)
-- File downloads with Range-resume and hash verification (`downloader`)
+- `controller` — calendar scheduler (XML current, XML history, ZIM, hourly publish)
+- `scraper` — discovers XML current/history dumps and Kiwix ZIM files
+- `downloader` — Range-resumable HTTP fetch with sha256 / ZIM magic verification;
+  also handles `redownload` jobs that pull from IA back to the staging dir
+- `uploader` — pushes each completed dump to Internet Archive via the
+  `internetarchive` library; enqueues `create_torrent` when a group completes
+- `creator` — bundles a completed group into a `.torrent` file with `torf`,
+  uploads to R2, inserts torrent rows, enqueues `register_torrent` + `publish_manifest`
+- `seeder` — adds and removes torrents in qBittorrent via the Web API
+- `health_monitor` — UDP BEP-15 tracker scraping, threshold tracking, redownload
+  triggering when files are gone and the swarm has dropped below threshold
+- `storage_manager` — enforces the HDD budget, drops eligible torrents
+  oldest-first, deletes staging directories and local `.torrent` files
+- `publisher` — builds `manifest/latest.json` and status JSONs, writes a local
+  copy, mirrors to R2 (with 12 versioned snapshots) and to a GitHub fallback branch
 
-Stubbed (runnable, but `raise NotImplementedError` inside):
+What still needs human attention before it's production:
 
-- `creator` — torrent generation
-- `uploader` — Internet Archive upload
-- `seeder` — qBittorrent integration
-- `health_monitor` — tracker scraping and redownload triggering
-- `storage_manager` — HDD budget enforcement
-- `publisher` — manifest + status JSON to R2 and GitHub
-
-Each stub's docstring explains exactly what needs to be implemented and which
-library to use.
+- Boilerplate `wikiseed/templates/*.txt` files (README/LICENSE/VERSION inside
+  the torrents) need to be replaced with final copy
+- After a redownload, the staging dir is rebuilt with dump files but README/
+  LICENSE/VERSION/SOURCES are not re-rendered — qBittorrent will flag them as
+  missing until rebuilt (TODO in `downloader.redownload`)
+- IA item metadata (`uploader._ia_metadata`) is minimal; refine titles, subject
+  tags, collection, description for the actual launch
 
 ## Repo layout
 
